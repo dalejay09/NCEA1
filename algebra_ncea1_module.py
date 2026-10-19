@@ -84,7 +84,6 @@ def generate_abstract_data():
         var_char = 'x'
         
     elif variant == 'box':
-        # Now safely configured as a pure quadratic
         c = random.randint(2, 4)
         w = random.randint(2 * c + 2, 12)
         diff = random.randint(2, 5)
@@ -96,7 +95,6 @@ def generate_abstract_data():
         var_char = 'x'
         
     elif variant == 'projectile':
-        # -5(t - a)(t + b) = 0 logic for clean factoring
         a = random.randint(3, 8) 
         b = random.randint(1, 3) 
         v = 5 * (a - b)
@@ -119,7 +117,6 @@ def generate_abstract_data():
         )
         instruction_text = response.text.strip()
     except Exception:
-        # Fallback if API fails during generation
         instruction_text = context
 
     return instruction_text, eq, ans, var_char
@@ -358,3 +355,162 @@ def create_pdf_bytes(level, specific_type):
                 left_idx, right_idx = i, i + 10
                 txt_l = f"Q{left_idx+1}: ${problems[left_idx]['a_latex']}$\n{ai_steps.get(left_idx+1, '')}"
                 txt_r = f"Q{right_idx+1}: ${problems[right_idx]['a_latex']}$\n{ai_steps.get(right_idx+1, '')}"
+                y_pos = 0.90 - (i * 0.088)
+                ax_ans.text(0.04, y_pos, txt_l, fontsize=7.0, va='top', wrap=True)
+                ax_ans.text(0.52, y_pos, txt_r, fontsize=7.0, va='top', wrap=True)
+            pdf.savefig(fig_ans); plt.close(fig_ans)
+    except Exception as e:
+        st.error(f"PDF Generation Error: {e}")
+        raise e
+
+    buffer.seek(0)
+    return buffer.getvalue()
+
+def handle_settings_change():
+    st.session_state.generating = True
+    st.session_state.pdf_bytes = None
+    st.session_state.id_feedback = ""
+    st.session_state.current_marking_color_index = 0 
+    st.session_state.problem_suite_refresh_id += 1 
+
+# --- START OF MODULE WRAPPER ---
+def run_app():
+
+    # --- State Management & CSS Setup ---
+    if 'PEN_COLORS' not in st.session_state:
+        st.session_state.PEN_COLORS = ["#1E90FF", "#FF2400", "#32CD32", "#9400D3", "#FF8C00"]
+        st.session_state.COLOR_NAMES = ["BLUE", "RED", "GREEN", "PURPLE", "ORANGE"]
+
+    st.markdown("""
+        <style>
+        button[kind="primary"] { background-color: #007AFF !important; border-color: #007AFF !important; color: white !important; }
+        button[kind="primary"]:hover { background-color: #0056b3 !important; border-color: #0056b3 !important; }
+        div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button {
+            background-color: #28a745 !important; border-color: #28a745 !important; color: white !important;
+        }
+        div[data-testid="stElementContainer"]:has(#next-problem-btn) + div[data-testid="stElementContainer"] button:hover {
+            background-color: #218838 !important; border-color: #218838 !important;
+        }
+        .stRadio > div { gap: 0rem; }
+        [data-testid="stHorizontalBlock"] { gap: 0.5rem; align-items: center; }
+        div[data-testid="stToolbar"] { display: none; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    if 'generating' not in st.session_state: st.session_state.generating = True
+    if 'alg_topic' not in st.session_state: st.session_state.alg_topic = "All Topics (Random)"
+    if 'level' not in st.session_state: st.session_state.level = "1"
+    if 'interaction_mode' not in st.session_state: st.session_state.interaction_mode = "Solve"
+    if 'solution_req' not in st.session_state: st.session_state.solution_req = "demonstrated"
+    if 'camera_mode' not in st.session_state: st.session_state.camera_mode = "None"
+    if 'show_controls' not in st.session_state: st.session_state.show_controls = False
+    if 'pdf_bytes' not in st.session_state: st.session_state.pdf_bytes = None
+    if 'problem_suite_refresh_id' not in st.session_state: st.session_state.problem_suite_refresh_id = 0
+    if 'id_feedback' not in st.session_state: st.session_state.id_feedback = ""
+
+    # --- UI Setup ---
+    st.title("Algebra Techniques 101 ✖️")
+
+    col_actions, col_set = st.columns([5, 1])
+    with col_actions:
+        with st.popover("📄 Worksheet Actions", use_container_width=True):
+            st.markdown("**1. Create a physical worksheet**")
+            if st.session_state.pdf_bytes is None:
+                if st.button("⚙️ Generate Worksheet PDF", use_container_width=True):
+                    with st.spinner("Compiling Master PDF Grid..."):
+                        try:
+                            st.session_state.pdf_bytes = create_pdf_bytes(st.session_state.level, st.session_state.alg_topic)
+                        except Exception:
+                            st.session_state.pdf_bytes = None
+                    st.rerun()
+            else:
+                timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S")
+                st.download_button("⬇️ Download Worksheet", data=st.session_state.pdf_bytes, file_name=f"Algebra_101_{timestamp_str}.pdf", mime="application/pdf", use_container_width=True, type="primary")
+                if st.button("🗑️ Clear / Reset PDF", use_container_width=True):
+                    st.session_state.pdf_bytes = None
+                    st.rerun()
+
+    with col_set:
+        with st.popover("⚙️", use_container_width=True):
+            st.write("**Settings**")
+            topics = ["All Topics (Random)", "Expanding", "Factorising", "Solving Equations", "Algebraic Fractions", "Abstract Problems"]
+            st.selectbox("Filter Topic", topics, key="alg_topic", on_change=handle_settings_change)
+            st.radio("Level", ["1", "2"], key="level", horizontal=True, on_change=handle_settings_change)
+            st.radio("Interaction Mode", ["Identification", "Solve"], key="interaction_mode", on_change=handle_settings_change)
+            st.radio("Solution Required", ["demonstrated", "numeric"], key="solution_req", on_change=handle_settings_change)
+            st.radio("Camera Mode", ["None", "App", "Native"], key="camera_mode", horizontal=True, on_change=handle_settings_change)
+            st.toggle("Canvas Controls", key="show_controls", on_change=handle_settings_change)
+
+    # --- Master App Logic ---
+    if st.session_state.generating:
+        with st.spinner("Drafting your custom word problem..."):
+            p_data = generate_algebra_problem(st.session_state.level, st.session_state.alg_topic)
+            st.session_state.alg_problem_data = p_data
+            st.session_state.problem_image_context = draw_algebra_image(p_data, width_px=380, height_px=760)
+            st.session_state.generating = False
+            st.rerun()
+
+    else:
+        bg_image = st.session_state.problem_image_context
+        p_data = st.session_state.alg_problem_data
+        
+        if p_data['type'] != 'abstract_problem':
+            st.write(f"**{p_data['instruction']}**")
+            st.latex(p_data['q_latex'])
+
+        if st.session_state.interaction_mode == "Identification" and p_data['type'] != 'abstract_problem':
+            st.image(bg_image, use_container_width=True)
+            st.write("Which of the following is the correct mathematical conclusion?")
+            
+            correct_opt, dist1, dist2 = generate_distractors(p_data['a_latex'], p_data['variable'])
+            
+            if 'id_eq_options' not in st.session_state or st.session_state.get('last_refresh_id') != st.session_state.problem_suite_refresh_id:
+                options = [f"${correct_opt}$", f"${dist1}$", f"${dist2}$"]
+                random.shuffle(options)
+                st.session_state.id_eq_options = options
+                st.session_state.last_refresh_id = st.session_state.problem_suite_refresh_id
+
+            c1, c2, c3 = st.columns(3)
+            def check_eq(guess):
+                if guess == f"${correct_opt}$": st.session_state.id_feedback = "Correct! Spot on algebra."
+                else: st.session_state.id_feedback = "Not quite. Check your positive and negative signs!"
+
+            for idx, opt in enumerate(st.session_state.id_eq_options):
+                col = [c1, c2, c3][idx]
+                if col.button(opt, use_container_width=True, key=f"eq_btn_{idx}"):
+                    check_eq(opt)
+            
+            f_msg = st.session_state.get('id_feedback', '')
+            if f_msg:
+                if "Correct" in f_msg: st.success(f"🌟 {f_msg}")
+                else: st.warning(f"🤖 {f_msg}")
+                
+        else:
+            canvas_height = 760
+            
+            problem_context = (
+                f"This is an algebra problem. Instruction: {p_data['instruction']}. "
+                f"Question expression: {p_data.get('q_latex', 'None')}. "
+                f"The exact correct final algebraic answer is: {p_data['a_latex']}. "
+                f"The unknown variable used is '{p_data['variable']}'.\n\n"
+                "IMPORTANT GRADING RULES FOR DIGITAL INK CORRECTIONS:\n"
+                "1. The student is writing on a digital canvas and may not use an eraser. Their LATEST, definitive attempt is written in the active grading ink. Treat all other colors as older mistakes or superseded workings.\n"
+                "2. Sign Overwriting: If a student sketches a vertical line or a plus sign over an existing minus sign, evaluate it as a positive sign. If they sketches a horizontal line over an existing plus sign, evaluate it as a minus sign. Always trust the active ink modifier.\n"
+                "3. Overlapping Strikethroughs: Students will often leave old strikethrough lines on incorrectly eliminated terms. Ignore superseded strikethroughs from older colors. Only evaluate the eliminations and the final answer written in the active ink."
+            )
+
+            ai_marking_component.render_grading_suite(
+                bg_image=bg_image,
+                height_px=canvas_height,
+                key_prefix=f"alg_suite_{st.session_state.problem_suite_refresh_id}",
+                solution_requirement=st.session_state.get('solution_req', 'demonstrated'),
+                problem_context=problem_context,
+                show_controls=st.session_state.show_controls,
+                camera_mode=st.session_state.camera_mode
+            )
+
+        st.markdown("<hr style='margin: 0.5em 0px; border-color: #444;'>", unsafe_allow_html=True)
+        st.markdown('<div id="next-problem-btn"></div>', unsafe_allow_html=True)
+        if st.button("Give me a new algebra problem!", use_container_width=True):
+            handle_settings_change()
+            st.rerun()
