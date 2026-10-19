@@ -4,12 +4,12 @@ import streamlit as st
 st.set_page_config(page_title="NCEA Level 1 Maths Revision", page_icon="🎓", layout="centered")
 
 # 2. Import your 6 modified app files
-import algebratechniques101_student_solver_2 as algebra
-import graph_student_solver_with_ai_marking as graphs
-import trig101_student_solver as trig
-import linear101_student_solver as linear
-import table_student_solver_with_ai_marking as tables
-import geometry3d_101_student_solver as geometry # Note the renamed file!
+import algebra_ncea1_module as algebra
+import graphs_ncea1_module as graphs
+import trig_ncea1_module as trig
+import linear_ncea1_module as linear
+import tables_ncea1_module as tables
+import geometry3d_ncea1_module as geometry
 
 # 3. Create a tab-reset handler
 def handle_nav_change():
